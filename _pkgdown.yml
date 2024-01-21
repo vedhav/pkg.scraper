@@ -1,0 +1,12 @@
+url: ~
+template:
+  bootstrap: 5
+reference:
+  - title: Main `pkg.scraper` functions
+    desc: Main functions needed to get function dependencies from a package
+    contents:
+      - get_package_contents
+      - filter_func_objs
+      - get_function_calls
+      - get_all_function_deps
+      - build_vis_network

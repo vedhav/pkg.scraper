@@ -1,0 +1,25 @@
+Package: pkg.scraper
+Title: Scrape internal function dependencies from R packages.
+Version: 0.0.0.9000
+Date: 2024-01-21
+Authors@R: c(
+    person("Vedha", "Viyash", , "vedhaviyash4@gmail.com", role = c("aut", "cre"))
+  )
+Description: This package provides functions to scrape the internal function dependencies
+    of R packages installed locally and help in visualizing them.
+License: MIT + file LICENSE
+URL: https://vedhav.github.io/pkg.scraper/,
+    https://github.com/vedhav/pkg.scraper/
+BugReports: https://github.com/vedhav/pkg.scraper/issues
+Depends:
+    R (>= 4.1)
+Imports:
+    codetools,
+    dplyr,
+    purrr,
+    sloop,
+    tibble,
+    visNetwork
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
