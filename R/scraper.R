@@ -105,7 +105,30 @@ build_vis_network <- function(pkg) {
     dplyr::rename(id = func_name, group = func_type) |>
     dplyr::mutate(label = id)
   edges <- func_deps
-  visNetwork::visNetwork(nodes, edges) |>
+  s3_generics <- pkg_funcs |>
+    dplyr::filter(func_type == "S3 generic") |>
+    dplyr::pull(func_name)
+  if (length(s3_generics) > 0) {
+    s3_methods <- pkg_funcs |>
+      dplyr::filter(func_type == "S3 method") |>
+      dplyr::pull(func_name)
+    s3_edges <- purrr::map_df(s3_generics, function(s3_generic) {
+      method_vector <- as.character(.S3methods(s3_generic, envir = getNamespace(pkg)))
+      tibble::tibble(from = s3_generic, to = method_vector)
+    }) |>
+      dplyr::filter(to %in% s3_methods)
+    edges <- dplyr::bind_rows(edges, s3_edges)
+  }
+  network <- visNetwork::visNetwork(nodes, edges, width = "100%", height = "960px") |>
     visNetwork::visOptions(highlightNearest = list(enabled = TRUE, degree = 1)) |>
-    visNetwork::visLegend()
+    visNetwork::visLegend() |>
+    visNetwork::visEdges(arrows = "to")
+  network$x$options$groups <- list(
+    "function" = list(color = "#4ba3e2"),
+    "S3 generic" = list(color = "#f2e534"),
+    "S3 method" = list(color = "#2cd6ac"),
+    "S4 generic" = list(color = "#f2a756"),
+    "S4 generic (non-standard)" = list(color = "#fa7c5d")
+  )
+  return(network)
 }
