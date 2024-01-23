@@ -39,6 +39,32 @@ get_package_contents <- function(pkg_names) {
   return(return_df)
 }
 
+#' Get R6 methods
+#'
+#' This function retrieves the methods of R6 classes within a specified package.
+#'
+#' @param pkg A character string specifying the package name.
+#' @return A tibble of R6 methods within the specified package.
+#' @export
+get_r6_methods <- function(pkg) {
+  ns <- getNamespace(pkg)
+  purrr::map_df(
+    get_package_contents(pkg) |>
+      dplyr::filter(func_type == "R6ClassGenerator") |>
+      dplyr::pull(func_name),
+    function(x, y) {
+      public_methods <- names(ns[[x]]$public_methods)
+      public_methods <- public_methods[!public_methods %in% c("initialize", "clone")]
+      private_methods <- names(ns[[x]]$private_methods)
+      tibble::tibble(
+        class_name = x,
+        method = c(public_methods, private_methods),
+        type = c(rep("public", length(public_methods)), rep("private", length(private_methods)))
+      )
+    }
+  )
+}
+
 #' Filter function objects
 #'
 #' This function filters the exported objects of a package to include only functions and S3/S4 methods/generics.
@@ -90,6 +116,49 @@ get_all_function_deps <- function(pkg) {
 }
 
 
+#' Get R6 method calls
+#'
+#' This function retrieves the method calls within a specified R6 method in a package.
+#'
+#' @param pkg A character string specifying the package name.
+#' @param r6_class A character string specifying the R6 class name.
+#' @param r6_method A character string specifying the R6 method name.
+#' @param method_type A character string specifying the method type (public or private).
+#' @return A tibble of method calls within the specified R6 method.
+#' @export
+get_r6_method_calls <- function(pkg, r6_class, r6_method, method_type = "public") {
+  r6_def <- getNamespace(pkg)[[r6_class]]
+  func_def <- r6_def[[paste0(method_type, "_methods")]][[r6_method]]
+  pkg_exports <- get_package_contents(pkg) |>
+    filter_func_objs()
+  pkg_exports |>
+    dplyr::filter(func_name %in% codetools::findGlobals(func_def))
+}
+
+#' Get all R6 method dependencies
+#'
+#' This function retrieves all R6 method dependencies within a specified package.
+#'
+#' @param pkg A character string specifying the package name.
+#' @return A tibble of R6 method dependencies within the specified package.
+#' @export
+get_all_r6_method_deps <- function(pkg) {
+  r6_methods <- get_r6_methods(pkg)
+  method_relations <- purrr::pmap_df(r6_methods, function(class_name, method, type) {
+    internal_calls <- get_r6_method_calls(pkg, class_name, method, type)
+    if (nrow(internal_calls) > 0) {
+      tibble::tibble(
+        from = paste0(class_name, "::", method),
+        to = internal_calls$func_name
+      )
+    } else {
+      NULL
+    }
+  }, .progress = TRUE)
+  return(method_relations)
+}
+
+
 #' Build visualization network
 #'
 #' This function builds a visualization network for a specified package.
@@ -119,6 +188,33 @@ build_vis_network <- function(pkg) {
       dplyr::filter(to %in% s3_methods)
     edges <- dplyr::bind_rows(edges, s3_edges)
   }
+  r6_methods <- get_r6_methods(pkg)
+  if (nrow(r6_methods) > 0) {
+    r6_classes <- tibble::tibble(
+      pkg_name = pkg,
+      id = unique(r6_methods$class_name),
+      group = "R6 class",
+      label = unique(r6_methods$class_name)
+    )
+    r6_class_edges <- tibble::tibble(
+      from = r6_methods$class_name,
+      to = paste0(r6_methods$class_name, "::", r6_methods$method)
+    )
+    r6_methods <- r6_methods |>
+      dplyr::transmute(
+        pkg_name = pkg,
+        id = paste0(class_name, "::", method),
+        label = method,
+        group = paste0("R6 method (", type, ")")
+      )
+    r6_deps <- get_all_r6_method_deps(pkg)
+    nodes <- nodes |>
+      dplyr::bind_rows(r6_classes) |>
+      dplyr::bind_rows(r6_methods)
+    edges <- edges |>
+      dplyr::bind_rows(r6_class_edges) |>
+      dplyr::bind_rows(r6_deps)
+  }
   network <- visNetwork::visNetwork(nodes, edges, width = "100%", height = "960px") |>
     visNetwork::visOptions(highlightNearest = list(enabled = TRUE, degree = 1)) |>
     visNetwork::visLegend() |>
@@ -128,7 +224,10 @@ build_vis_network <- function(pkg) {
     "S3 generic" = list(color = "#f2e534"),
     "S3 method" = list(color = "#2cd6ac"),
     "S4 generic" = list(color = "#f2a756"),
-    "S4 generic (non-standard)" = list(color = "#fa7c5d")
+    "S4 generic (non-standard)" = list(color = "#f2a756"),
+    "R6 class" = list(color = "#9f75f2"),
+    "R6 method (public)" = list(color = "#69f177"),
+    "R6 method (private)" = list(color = "#f16363")
   )
   return(network)
 }

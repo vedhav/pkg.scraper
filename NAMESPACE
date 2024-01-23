@@ -3,5 +3,8 @@
 export(build_vis_network)
 export(filter_func_objs)
 export(get_all_function_deps)
+export(get_all_r6_method_deps)
 export(get_function_calls)
 export(get_package_contents)
+export(get_r6_method_calls)
+export(get_r6_methods)
